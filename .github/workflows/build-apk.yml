@@ -1,17 +1,24 @@
 name: Budowanie aplikacji APK
 
 on:
-  workflow_dispatch:
   push:
     branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Pobierz repozytorium
         uses: actions/checkout@v4
+
+      - name: Ustaw Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Ustaw Java
         uses: actions/setup-java@v4
@@ -19,22 +26,44 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Rozpakuj projekt
+      - name: Przygotuj pliki aplikacji
+        shell: bash
         run: |
-          unzip TablicaOperacyjnaAndroid_projekt.zip
-          ls -la TablicaOperacyjnaAndroid
+          set -euo pipefail
+          mkdir -p www extracted
+          ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'TablicaOperacyjnaAndroid_projekt.zip' -print -quit)"
+          if [ -n "$ZIP_FILE" ]; then
+            unzip -o "$ZIP_FILE" -d extracted
+            HTML_FILE="$(find extracted -type f -iname 'index.html' -print -quit)"
+          else
+            HTML_FILE="$(find . -maxdepth 3 -type f -iname 'index.html' ! -path './www/*' ! -path './extracted/*' -print -quit)"
+          fi
+          if [ -z "${HTML_FILE:-}" ] || [ ! -f "$HTML_FILE" ]; then
+            echo "::error::Nie znaleziono index.html w repozytorium ani archiwum ZIP."
+            exit 1
+          fi
+          cp "$HTML_FILE" www/index.html
+          echo "Użyto pliku: $HTML_FILE"
 
-      - name: Ustaw Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.9'
+      - name: Utwórz projekt Android
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/android
+          npm install --save-dev @capacitor/cli
+          npx cap init "Tablica operacyjna" "pl.pajurawski.tablicaoperacyjna" --web-dir=www
+          npx cap add android
+          npx cap sync android
 
       - name: Zbuduj APK
-        working-directory: TablicaOperacyjnaAndroid
-        run: gradle --no-daemon assembleDebug
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Udostępnij APK
         uses: actions/upload-artifact@v4
         with:
-          name: TablicaOperacyjna
-          path: TablicaOperacyjnaAndroid/app/build/outputs/apk/debug/app-debug.apk
+          name: Tablica-operacyjna-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
