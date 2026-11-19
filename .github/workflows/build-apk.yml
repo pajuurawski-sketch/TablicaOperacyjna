@@ -48,7 +48,7 @@ jobs:
       - name: Utwórz projekt Android
         run: |
           npm init -y
-          npm install @capacitor/core @capacitor/android
+          npm install @capacitor/core @capacitor/android @capacitor/app
           npm install --save-dev @capacitor/cli
           npx cap init "Tablica operacyjna" "pl.pajurawski.tablicaoperacyjna" --web-dir=www
           npx cap add android
