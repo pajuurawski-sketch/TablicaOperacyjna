@@ -1,0 +1,2 @@
+# TablicaOperacyjna
+Aplikacja Tablica Operacyjna 
