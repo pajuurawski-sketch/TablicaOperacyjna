@@ -31,19 +31,23 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p www extracted
-          ZIP_FILE="$(find . -maxdepth 2 -type f -iname 'TablicaOperacyjnaAndroid_projekt.zip' -print -quit)"
+          ZIP_FILE="$(find . -maxdepth 4 -type f -iname '*.zip' ! -path './.git/*' -print -quit)"
           if [ -n "$ZIP_FILE" ]; then
+            echo "Rozpakowuję: $ZIP_FILE"
             unzip -o "$ZIP_FILE" -d extracted
             HTML_FILE="$(find extracted -type f -iname 'index.html' -print -quit)"
           else
-            HTML_FILE="$(find . -maxdepth 3 -type f -iname 'index.html' ! -path './www/*' ! -path './extracted/*' -print -quit)"
+            HTML_FILE="$(find . -maxdepth 5 -type f -iname 'index.html' ! -path './www/*' ! -path './extracted/*' ! -path './.git/*' -print -quit)"
           fi
           if [ -z "${HTML_FILE:-}" ] || [ ! -f "$HTML_FILE" ]; then
-            echo "::error::Nie znaleziono index.html w repozytorium ani archiwum ZIP."
+            echo "::error::Nie znaleziono index.html. Sprawdź, czy archiwum ZIP zawiera index.html."
+            echo "Pliki ZIP w repozytorium:"
+            find . -maxdepth 4 -type f -iname '*.zip' -print
             exit 1
           fi
           cp "$HTML_FILE" www/index.html
           echo "Użyto pliku: $HTML_FILE"
+          ls -lh www/index.html
 
       - name: Utwórz projekt Android
         run: |
