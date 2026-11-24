@@ -94,6 +94,7 @@ jobs:
             cp assets/ic_launcher.png "$RES/mipmap-$density/ic_launcher.png"
             cp assets/ic_launcher.png "$RES/mipmap-$density/ic_launcher_round.png"
           done
+          mkdir -p "$RES/mipmap-nodpi"
           cp assets/ic_launcher.png "$RES/mipmap-nodpi/ic_launcher.png"
 
           # Kluczowa poprawka: Android 8+ używa adaptive-icon XML,
