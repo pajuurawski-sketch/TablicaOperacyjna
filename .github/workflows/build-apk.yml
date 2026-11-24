@@ -57,6 +57,98 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Dodaj właściwą ikonę i obsługę Android TV
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP_RES="android/app/src/main/res"
+          mkdir -p "$APP_RES/drawable"
+
+          # ZIP zawiera pełny projekt źródłowy. Kopiujemy z niego zasoby ikon,
+          # zamiast ograniczać się do samego index.html.
+          SOURCE_RES="$(find extracted -type d -path '*/app/src/main/res' -print -quit)"
+          if [ -z "$SOURCE_RES" ]; then
+            echo "::error::Nie znaleziono zasobów Androida w rozpakowanym ZIP-ie."
+            exit 1
+          fi
+
+          for DIR in "$SOURCE_RES"/mipmap-*; do
+            if [ -d "$DIR" ]; then
+              cp -a "$DIR" "$APP_RES/"
+            fi
+          done
+
+          if [ ! -f "$SOURCE_RES/drawable/tv_banner.png" ]; then
+            echo "::error::Brak drawable/tv_banner.png w projekcie ZIP."
+            exit 1
+          fi
+          cp "$SOURCE_RES/drawable/tv_banner.png" "$APP_RES/drawable/tv_banner.png"
+
+          # Dodajemy launcher Android TV do manifestu wygenerowanego przez Capacitor.
+          python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          ET.register_namespace('android', 'http://schemas.android.com/apk/res/android')
+          ns = '{http://schemas.android.com/apk/res/android}'
+          tree = ET.parse(p)
+          root = tree.getroot()
+
+          def ensure_feature(name):
+              for e in root.findall('uses-feature'):
+                  if e.get(ns + 'name') == name:
+                      e.set(ns + 'required', 'false')
+                      return
+              ET.SubElement(root, 'uses-feature', {ns + 'name': name, ns + 'required': 'false'})
+
+          ensure_feature('android.software.leanback')
+          ensure_feature('android.hardware.touchscreen')
+
+          app = root.find('application')
+          if app is None:
+              raise SystemExit('Brak elementu application w AndroidManifest.xml')
+          app.set(ns + 'icon', '@mipmap/ic_launcher')
+          app.set(ns + 'roundIcon', '@mipmap/ic_launcher_round')
+          app.set(ns + 'banner', '@drawable/tv_banner')
+
+          activities = app.findall('activity')
+          if not activities:
+              raise SystemExit('Brak aktywności w AndroidManifest.xml')
+          main = None
+          for activity in activities:
+              for intent in activity.findall('intent-filter'):
+                  actions = [x.get(ns + 'name') for x in intent.findall('action')]
+                  cats = [x.get(ns + 'name') for x in intent.findall('category')]
+                  if 'android.intent.action.MAIN' in actions and 'android.intent.category.LAUNCHER' in cats:
+                      main = activity
+                      break
+              if main is not None:
+                  break
+          if main is None:
+              main = activities[0]
+          main.set(ns + 'icon', '@mipmap/ic_launcher')
+          main.set(ns + 'banner', '@drawable/tv_banner')
+          main.set(ns + 'label', 'Tablica operacyjna')
+
+          has_tv = False
+          for intent in main.findall('intent-filter'):
+              actions = [x.get(ns + 'name') for x in intent.findall('action')]
+              cats = [x.get(ns + 'name') for x in intent.findall('category')]
+              if 'android.intent.action.MAIN' in actions and 'android.intent.category.LEANBACK_LAUNCHER' in cats:
+                  has_tv = True
+                  break
+          if not has_tv:
+              intent = ET.SubElement(main, 'intent-filter')
+              ET.SubElement(intent, 'action', {ns + 'name': 'android.intent.action.MAIN'})
+              ET.SubElement(intent, 'category', {ns + 'name': 'android.intent.category.LEANBACK_LAUNCHER'})
+
+          tree.write(p, encoding='utf-8', xml_declaration=True)
+          print('Manifest Android TV poprawiony:', p)
+          PY
+
+          echo "Ikony skopiowane z: $SOURCE_RES"
+          find "$APP_RES" -maxdepth 2 -type f \( -name 'ic_launcher.png' -o -name 'tv_banner.png' \) -print
+
       - name: Włącz pełny ekran Android (ukryj pasek statusu i nawigacji)
         shell: bash
         run: |
